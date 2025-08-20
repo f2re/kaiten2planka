@@ -1,0 +1,24 @@
+kaiten:
+  api_url: "https://your-kaiten-instance.kaiten.ru/api/v1"
+  api_key: "${KAITEN_API_KEY}"
+
+planka:
+  api_url: "https://your-planka-instance.com/api"
+  api_key: "${PLANKA_API_KEY}"
+
+migration:
+  workers: 5
+  rate_limit_rps: 10
+  retry_max_attempts: 5
+  retry_backoff_factor: 2
+  attachment_chunk_size: 8192
+  dry_run: false
+  force: false
+
+logging:
+  level: "INFO"
+  format: "json"
+  file: "migration.log"
+
+database:
+  path: "migrations.db"
