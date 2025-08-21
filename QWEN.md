@@ -4,7 +4,7 @@ This file contains instructions for customizing interactions with Qwen Code.
 
 ## Project Overview
 
-This project is called `kaiten2planka`. It is a Python application for migrate data from Kaiten to Planka. To get Kaiten data you must use kaiten package and it functions. To write to Planka you must use planka package and it functions, but to work with users list and accounts in planka tou must implement own function and dont use Planka package.
+This project is called `kaiten2planka`. It is a Python application for migrate data from Kaiten to Planka. To get Kaiten data you must use kaiten package and it functions. To write to Planka you must use planka package and it functions, but to work with users list and accounts in planka tou must implement own function and dont use Planka package. You must migrate cards, text, description of cards, checklists, attachments, users, tags and etc.
 
 ## Preferred Tools & Technologies
 
@@ -61,3 +61,11 @@ This project is called `kaiten2planka`. It is a Python application for migrate d
 - Be concise and direct in responses.
 - Use GitHub-flavored Markdown for formatting.
 - Focus on providing actionable information.
+
+## Bash commands and script execution
+
+to execute script and pip you must activate venv first:
+
+```bash
+source venv/bin/activate
+```
