@@ -69,7 +69,7 @@ def main():
         try:
             project = planka_client.create_project(
                 name=space_name,  # Only the Kaiten Project name, nothing else
-                description="",  # Empty description as requested
+                description=" ",  # Space character instead of empty string to avoid API error
                 type="private"
             )
             project_id = project['id']

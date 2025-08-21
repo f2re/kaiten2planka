@@ -160,7 +160,7 @@ class KaitenToPlankaMigrator:
             try:
                 project = self.planka_client.create_project(
                     name=space_name,
-                    description="",  # Empty description as requested
+                    description=" ",  # Space character instead of empty string to avoid API error
                     type="private"
                 )
                 project_id = project['id']

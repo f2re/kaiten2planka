@@ -48,11 +48,11 @@ class PlankaClient:
         """Create a new project in Planka."""
         data = {
             'name': name,
-            'description': description,
+            'description': description if description else " ",
             'type': type
         }
         response = self._make_request('POST', '/projects', json=data)
-        return response.get('data', {}).get('project', {})
+        return response.get('item', {})
 
     def get_boards(self, project_id: str) -> List[Dict[str, Any]]:
         """Get all boards for a project from Planka."""
@@ -63,12 +63,12 @@ class PlankaClient:
         """Create a new board in Planka."""
         data = {
             'name': name,
-            'description': description,
+            'description': description if description else " ",
             'type': type,
             'position': position
         }
         response = self._make_request('POST', f'/projects/{project_id}/boards', json=data)
-        return response.get('data', {}).get('board', {})
+        return response.get('item', {})
 
     def get_lists(self, board_id: str) -> List[Dict[str, Any]]:
         """Get all lists for a board from Planka."""
@@ -83,7 +83,7 @@ class PlankaClient:
             'type': type
         }
         response = self._make_request('POST', f'/boards/{board_id}/lists', json=data)
-        return response.get('data', {}).get('list', {})
+        return response.get('item', {})
 
     def get_cards(self, list_id: str) -> List[Dict[str, Any]]:
         """Get all cards for a list from Planka."""
@@ -94,12 +94,12 @@ class PlankaClient:
         """Create a new card in Planka."""
         data = {
             'name': name,
-            'description': description or "",
+            'description': description if description else " ",
             'position': position,
             'type': type
         }
         response = self._make_request('POST', f'/lists/{list_id}/cards', json=data)
-        return response.get('data', {}).get('card', {})
+        return response.get('item', {})
 
     def get_users(self) -> List[Dict[str, Any]]:
         """Get all users from Planka."""
@@ -117,7 +117,7 @@ class PlankaClient:
             'role': role
         }
         response = self._make_request('POST', '/users', json=data)
-        return response.get('data', {}).get('user', {})
+        return response.get('item', {})
 
     def get_labels(self, board_id: str) -> List[Dict[str, Any]]:
         """Get all labels for a board from Planka."""
