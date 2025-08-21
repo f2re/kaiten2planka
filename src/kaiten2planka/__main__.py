@@ -1,10 +1,6 @@
-"""
-Main entry point for the kaiten2planka package.
+"""Main entry point for CLI."""
 
-When run as `python -m kaiten2planka`, this module executes the CLI application.
-"""
+from .cli import migrate
 
-from .cli import main
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    migrate()

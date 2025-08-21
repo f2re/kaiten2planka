@@ -1,4 +1,4 @@
-"""Authentication modules for Kaiten and Planka APIs."""
+"""Authentication modules."""
 
 from .kaiten import authenticate_kaiten
 from .planka import authenticate_planka

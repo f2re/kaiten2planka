@@ -1,33 +1,40 @@
-"""Project mapping functions for Kaiten to Planka conversion."""
+"""Project mapping functionality."""
 
 from typing import Dict, Any
+import logging
 
-from .core import _convert_datetime, _map_user_reference
+logger = logging.getLogger(__name__)
 
 
 def map_project(kaiten_project: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Map Kaiten project to Planka project format.
+    Map Kaiten project to Planka board.
     
     Args:
-        kaiten_project: Raw project data from Kaiten API
+        kaiten_project: Kaiten project data
         
     Returns:
-        Mapped project data for Planka
+        Planka board data
     """
-    return {
-        'id': str(kaiten_project['id']),
-        'name': kaiten_project.get('name', 'Unnamed Project'),
-        'description': kaiten_project.get('description') or '',
-        'createdAt': _convert_datetime(kaiten_project.get('created')),
-        'updatedAt': _convert_datetime(kaiten_project.get('modified')),
-        'isArchived': kaiten_project.get('is_archived', False),
-        'isTemplate': kaiten_project.get('is_template', False),
-        'color': kaiten_project.get('color') or '#1976D2',  # Default blue
-        'creator': _map_user_reference(kaiten_project.get('created_by')),
-        'members': [_map_user_reference(member) for member in kaiten_project.get('members', [])],
-        'metadata': {
-            'kaiten_id': str(kaiten_project['id']),
-            'kaiten_url': kaiten_project.get('url', ''),
-        },
+    # Preserve original timestamps
+    description = kaiten_project.get('description', '')
+    
+    if 'created_at' in kaiten_project or 'updated_at' in kaiten_project:
+        description += '\n\n--- Original Timestamps ---\n'
+        if 'created_at' in kaiten_project:
+            description += f'Created: {kaiten_project["created_at"]}\n'
+        if 'updated_at' in kaiten_project:
+            description += f'Updated: {kaiten_project["updated_at"]}\n'
+    
+    planka_board = {
+        'name': kaiten_project.get('title', kaiten_project.get('name', '')),
+        'description': description,
+        'position': kaiten_project.get('position', 0),
     }
+    
+    # Handle background color if present
+    if 'color' in kaiten_project:
+        planka_board['background_color'] = kaiten_project['color']
+    
+    logger.debug(f"Mapped project {kaiten_project.get('id')} to board")
+    return planka_board
