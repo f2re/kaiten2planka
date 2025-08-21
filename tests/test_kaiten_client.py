@@ -10,6 +10,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from kaiten_client import KaitenClient
+import config
 
 
 class TestKaitenClient(unittest.TestCase):
@@ -23,7 +24,7 @@ class TestKaitenClient(unittest.TestCase):
     def test_client_has_required_methods(self):
         """Test that KaitenClient has all required methods."""
         # Check that the client has all the required methods
-        client = KaitenClient("https://example.kaiten.ru/api/v1", "test-api-key")
+        client = KaitenClient(config.KAITEN_API_URL, config.KAITEN_API_KEY)
         
         required_methods = [
             'get_spaces',

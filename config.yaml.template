@@ -1,8 +1,0 @@
-kaiten:
-  api_url: "https://your-kaiten-instance.kaiten.ru/api/v1"
-  api_key: "${KAITEN_API_KEY}"
-
-planka:
-  api_url: "https://your-planka-instance.com/api"
-  api_key: "${PLANKA_API_KEY}"
-

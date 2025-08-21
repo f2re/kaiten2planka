@@ -3,12 +3,9 @@
 Main script for migrating data from Kaiten to Planka.
 """
 
-import os
-import sys
 import logging
-from typing import Dict, Any
-import yaml
-from dotenv import load_dotenv
+import sys
+import os
 
 # Add current directory to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -16,73 +13,78 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from kaiten_client import KaitenClient
 from planka_client import PlankaClient
 from migrator import KaitenToPlankaMigrator
+import config
 
-# Load environment variables
-load_dotenv()
-
-# Set up logging
-log_level = os.getenv('LOG_LEVEL', 'INFO')
-logging.basicConfig(
-    level=getattr(logging, log_level),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
-
-
-def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
-    """Load configuration from YAML file."""
-    try:
-        with open(config_path, 'r') as file:
-            return yaml.safe_load(file)
-    except FileNotFoundError:
-        logger.error(f"Configuration file {config_path} not found.")
-        sys.exit(1)
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing YAML configuration: {e}")
-        sys.exit(1)
 
 
 def main():
     """Main function to run the migration process."""
     logger.info("Starting Kaiten to Planka migration")
-    
-    # Load configuration
-    config = load_config()
-    
+
     # Initialize Kaiten client
-    kaiten_config = config['kaiten']
     kaiten_client = KaitenClient(
-        api_url=kaiten_config['api_url'],
-        api_key=os.path.expandvars(kaiten_config['api_key'])
+        api_url=config.KAITEN_API_URL,
+        api_key=config.KAITEN_API_KEY
     )
-    
+
     # Initialize Planka client
-    planka_config = config['planka']
     planka_client = PlankaClient(
-        api_url=planka_config['api_url'],
-        api_key=os.path.expandvars(planka_config['api_key'])
+        api_url=config.PLANKA_API_URL,
+        api_key=config.PLANKA_API_KEY
     )
     
-    # For now, we'll create a default project to migrate boards into
-    # In a more complete implementation, we would migrate projects as well
-    projects = planka_client.get_projects()
-    if projects:
-        project_id = projects[0]['id']  # Use the first project
-        logger.info(f"Using existing project: {projects[0]['name']}")
-    else:
-        # Create a new project if none exists
-        project = planka_client.create_project(
-            name="Migrated from Kaiten",
-            description="Project migrated from Kaiten"
-        )
-        project_id = project['id']
-        logger.info(f"Created new project: {project['name']}")
-    
+    # Clean all existing projects in Planka before migration
+    logger.info("Cleaning all existing projects in Planka")
+    try:
+        existing_projects = planka_client.get_projects()
+        for project in existing_projects:
+            project_id = project['id']
+            project_name = project['name']
+            if planka_client.delete_project(project_id):
+                logger.info(f"Deleted existing project: {project_name}")
+            else:
+                logger.error(f"Failed to delete project: {project_name}")
+    except Exception as e:
+        logger.error(f"Error while cleaning projects: {e}")
+
     # Initialize migrator
     migrator = KaitenToPlankaMigrator(kaiten_client, planka_client)
-    
-    # Perform complete migration
-    migrator.migrate_all(project_id)
+
+    # First, migrate all users
+    migrator.migrate_users()
+
+    # Then, iterate through spaces and migrate each one as a separate project
+    kaiten_spaces = kaiten_client.get_spaces()
+    if not kaiten_spaces:
+        logger.warning("No spaces found in Kaiten. Nothing to migrate.")
+        return
+
+    for space in kaiten_spaces:
+        # Set space_name as Kaiten Project name only (as requested)
+        space_name = space.get('name', f"Kaiten Space {space['id']}")
+        logger.info(f"Processing space: {space_name}")
+
+        # Create a new project in Planka for this space
+        try:
+            project = planka_client.create_project(
+                name=space_name,  # Only the Kaiten Project name, nothing else
+                description="",  # Empty description as requested
+                type="private"
+            )
+            project_id = project['id']
+            logger.info(f"Created new project in Planka: {project['name']}")
+
+            # Get boards for this space
+            kaiten_boards = kaiten_client.get_boards_for_space(space['id'])
+            if kaiten_boards:
+                # Perform migration for this space's data
+                migrator.migrate_space_data(project_id, kaiten_boards)
+            else:
+                logger.info(f"No boards found in space: {space_name}")
+
+        except Exception as e:
+            logger.error(f"Failed to migrate space {space_name}: {e}")
     
     logger.info("Migration completed successfully")
 

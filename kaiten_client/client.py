@@ -4,6 +4,7 @@ Uses the official kaiten package.
 """
 
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from kaiten import KaitenClient as KaitenAPIClient
 
@@ -14,8 +15,8 @@ class KaitenClient:
     def __init__(self, api_url: str, api_key: str):
         # Remove trailing slash and adjust URL if needed
         clean_url = api_url.rstrip('/')
-        if clean_url.endswith('/api/v1'):
-            clean_url = clean_url[:-8]  # Remove '/api/v1'
+        if '/api/v1' in clean_url:
+            clean_url = clean_url.replace('/api/v1', '')
             
         self.api_url = clean_url
         self.api_key = api_key
@@ -24,34 +25,49 @@ class KaitenClient:
     def get_spaces(self) -> List[Dict[str, Any]]:
         """Get all spaces from Kaiten."""
         try:
-            spaces = self.client.list_of().spaces()
-            # Convert Space objects to dictionaries
-            return [space.__dict__ for space in spaces]
+            # The underlying library does not expose the request, so we do it manually
+            # to get more details on errors.
+            import requests
+            spaces_url = f"{self.api_url}/api/v1/spaces"
+            logger.info(f"Fetching spaces from {spaces_url}")
+            response = requests.get(spaces_url, headers=self.client.headers)
+            if response.status_code != 200:
+                logger.error(f"Error fetching spaces. Status: {response.status_code}, Body: {response.text}")
+                return []
+            
+            spaces_data = response.json()
+            return spaces_data
         except Exception as e:
-            logger.error(f"Error getting spaces: {e}")
+            logger.error(f"An exception occurred while getting spaces: {e}")
+            return []
+
+    def get_boards_for_space(self, space_id: int) -> List[Dict[str, Any]]:
+        """Get all boards for a specific space from Kaiten."""
+        try:
+            import requests
+            space_boards_url = f"{self.api_url}/api/v1/spaces/{space_id}/boards"
+            logger.info(f"Fetching boards from URL: {space_boards_url}")
+            response = requests.get(space_boards_url, headers=self.client.headers)
+            logger.info(f"Received response with status code: {response.status_code}")
+            if response.status_code != 200:
+                logger.error(f"Error response from server: {response.text}")
+                return []
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error getting boards for space {space_id}: {e}")
             return []
 
     def get_boards(self) -> List[Dict[str, Any]]:
-        """Get all boards from Kaiten."""
-        try:
-            # Get spaces first, then boards within each space
-            spaces = self.client.list_of().spaces()
-            boards = []
-            
-            for space in spaces:
-                # Get boards for each space using direct API call
-                # The kaiten package doesn't seem to have a direct method for this
-                import requests
-                space_boards_url = f"{self.client.base_api_url}/spaces/{space.id}/boards"
-                response = requests.get(space_boards_url, headers=self.client.headers)
-                if response.status_code == 200:
-                    space_boards = response.json()
-                    boards.extend(space_boards)
-                    
-            return boards
-        except Exception as e:
-            logger.error(f"Error getting boards: {e}")
-            return []
+        """Get all boards from all spaces in Kaiten."""
+        logger.info("Attempting to fetch all boards from Kaiten.")
+        all_boards = []
+        spaces = self.get_spaces()
+        for space in spaces:
+            time.sleep(0.2)  # Add a small delay to avoid rate limiting
+            boards = self.get_boards_for_space(space['id'])
+            if boards:
+                all_boards.extend(boards)
+        return all_boards
 
     def get_cards(self, board_id: int) -> List[Dict[str, Any]]:
         """Get all cards from a specific board."""

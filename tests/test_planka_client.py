@@ -11,20 +11,17 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from planka_client import PlankaClient
+import config
 
 
 class TestPlankaClient(unittest.TestCase):
     
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.planka_client = PlankaClient("https://example.planka.com/api", "test-api-key")
-        
     @patch('planka_client.client.requests.Session')
     def test_init(self, mock_session):
         """Test PlankaClient initialization."""
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
-        self.assertEqual(client.api_url, "https://example.planka.com/api")
-        self.assertEqual(client.api_key, "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
+        self.assertEqual(client.api_url, config.PLANKA_API_URL)
+        self.assertEqual(client.api_key, config.PLANKA_API_KEY)
         
     @patch('planka_client.client.requests.Session')
     def test_get_projects(self, mock_session):
@@ -47,7 +44,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         projects = client.get_projects()
         
         self.assertEqual(len(projects), 2)
@@ -76,7 +73,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         project = client.create_project("New Project", "Test project")
         
         self.assertEqual(project["name"], "New Project")
@@ -103,7 +100,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         boards = client.get_boards("project-1")
         
         self.assertEqual(len(boards), 2)
@@ -132,7 +129,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         board = client.create_board("project-1", "New Board", "Test board")
         
         self.assertEqual(board["name"], "New Board")
@@ -159,7 +156,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         lists = client.get_lists("board-1")
         
         self.assertEqual(len(lists), 2)
@@ -188,7 +185,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         list_obj = client.create_list("board-1", "New List", 65535)
         
         self.assertEqual(list_obj["name"], "New List")
@@ -215,7 +212,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         cards = client.get_cards("list-1")
         
         self.assertEqual(len(cards), 2)
@@ -245,7 +242,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         card = client.create_card("list-1", "New Card", "Test card", 65535)
         
         self.assertEqual(card["name"], "New Card")
@@ -273,7 +270,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         users = client.get_users()
         
         self.assertEqual(len(users), 2)
@@ -303,7 +300,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         user = client.create_user("New User", "newuser@example.com", "newuser", "password123")
         
         self.assertEqual(user["name"], "New User")
@@ -331,7 +328,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         labels = client.get_labels("board-1")
         
         self.assertEqual(len(labels), 2)
@@ -360,7 +357,7 @@ class TestPlankaClient(unittest.TestCase):
         mock_session.return_value = mock_session_instance
         
         # Create a new client with mocked dependencies
-        client = PlankaClient("https://example.planka.com/api", "test-api-key")
+        client = PlankaClient(config.PLANKA_API_URL, config.PLANKA_API_KEY)
         label = client.create_label("board-1", "New Label", "#CCCCCC")
         
         self.assertEqual(label["name"], "New Label")

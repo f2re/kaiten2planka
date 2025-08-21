@@ -25,16 +25,15 @@ This tool helps migrate data from Kaiten to Planka, including boards, cards, use
 
 ## Configuration
 
-1. Copy the example configuration files:
+1. Copy the example environment file:
    ```bash
-   cp config.yaml.template config.yaml
    cp .env.example .env
    ```
 
-2. Update `config.yaml` with your Kaiten and Planka API URLs
-
-3. Update `.env` with your API keys:
+2. Update `.env` with your API URLs and keys:
+   - `KAITEN_API_URL`: Your Kaiten API URL
    - `KAITEN_API_KEY`: Your Kaiten API key
+   - `PLANKA_API_URL`: Your Planka API URL
    - `PLANKA_API_KEY`: Your Planka API key
 
 ## Usage
