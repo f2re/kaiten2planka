@@ -152,27 +152,46 @@ class KaitenToPlankaMigrator:
             logger.warning("No spaces found in Kaiten. Nothing to migrate.")
             return
 
+        # Find the "MAD Team" space
+        mad_team_space = None
         for space in kaiten_spaces:
-            space_name = space.get('name', f"Kaiten Space {space['id']}")
-            logger.info(f"Processing space: {space_name}")
+            if space.get('title') == 'MAD Team':
+                mad_team_space = space
+                break
 
-            # Create a new project in Planka for this space
-            try:
-                project = self.planka_client.create_project(
-                    name=space_name,
-                    description=" ",  # Space character instead of empty string to avoid API error
-                    type="private"
-                )
-                project_id = project['id']
-                logger.info(f"Created new project in Planka: {project['name']}")
+        if not mad_team_space:
+            logger.error("MAD Team space not found in Kaiten. Nothing to migrate.")
+            return
 
-                # Get boards for this space
-                kaiten_boards = self.kaiten_client.get_boards_for_space(space['id'])
-                if kaiten_boards:
-                    # Perform migration for this space's data
-                    self.migrate_boards(project_id, kaiten_boards)
-                else:
-                    logger.info(f"No boards found in space: {space_name}")
+        # Process only the "MAD Team" space
+        space = mad_team_space
+        space_name = space.get('title', f"Kaiten Space {space['id']}")
+        logger.info(f"Processing space: {space_name}")
 
-            except Exception as e:
-                logger.error(f"Failed to migrate space {space_name}: {e}")
+        # Create a new project in Planka for this space
+        try:
+            project = self.planka_client.create_project(
+                name=space_name,
+                description=" ",  # Space character instead of empty string to avoid API error
+                type="private"
+            )
+            
+            # Check if project was created successfully
+            if not project or 'id' not in project:
+                logger.error(f"Failed to create project in Planka. Response: {project}")
+                return
+                
+            project_id = project['id']
+            logger.info(f"Created new project in Planka: {project.get('name', project_id)}")
+
+            # Get boards for this space
+            kaiten_boards = self.kaiten_client.get_boards_for_space(space['id'])
+            if kaiten_boards:
+                # Perform migration for this space's data
+                self.migrate_boards(project_id, kaiten_boards)
+            else:
+                logger.info(f"No boards found in space: {space_name}")
+
+        except Exception as e:
+            logger.error(f"Failed to migrate space {space_name}: {e}")
+            logger.exception("Exception details:")

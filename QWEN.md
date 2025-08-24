@@ -13,7 +13,7 @@ This project is called `kaiten2planka`. It is a Python application for migrate d
 - **Linting:** `ruff`
 - **Type Checking:** `mypy`
 - **Documentation:** Markdown
-- **Debugging:** Use `print` statements and the `icecream` package for debugging.
+- **Debugging:** Use `print` statements and the `icecream` (ic) package for debugging. You must import it on each file `from iceream import ic` where you want to print message.
 - **Packages:** For Kaiten use kaiten package.
 
 ## Code Style & Conventions

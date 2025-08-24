@@ -14,7 +14,7 @@ from kaiten_client import KaitenClient
 from planka_client import PlankaClient
 from migrator import KaitenToPlankaMigrator
 import config
-
+from icecream import ic
 logger = logging.getLogger(__name__)
 
 
@@ -36,23 +36,24 @@ def main():
     
     # Clean all existing projects in Planka before migration
     logger.info("Cleaning all existing projects in Planka")
+    if not planka_client.delete_all_boards_and_projects():
+        logger.error("Failed to clean existing projects in Planka")
+        return
+    
+    # Verify that all projects are deleted
     try:
         existing_projects = planka_client.get_projects()
-        for project in existing_projects:
-            project_id = project['id']
-            project_name = project['name']
-            if planka_client.delete_project(project_id):
-                logger.info(f"Deleted existing project: {project_name}")
-            else:
-                logger.error(f"Failed to delete project: {project_name}")
+        logger.info(f"Found {len(existing_projects)} existing projects after cleanup")
+        if existing_projects:
+            logger.warning("Some projects still exist after cleanup. This may cause issues.")
+            # Continue anyway, but log the warning
     except Exception as e:
-        logger.error(f"Error while cleaning projects: {e}")
-
+        logger.error(f"Error while verifying cleanup: {e}")
     # Initialize migrator
     migrator = KaitenToPlankaMigrator(kaiten_client, planka_client)
 
     # First, migrate all users
-    migrator.migrate_users()
+    # migrator.migrate_users()
 
     # Then, iterate through spaces and migrate each one as a separate project
     kaiten_spaces = kaiten_client.get_spaces()
@@ -60,20 +61,28 @@ def main():
         logger.warning("No spaces found in Kaiten. Nothing to migrate.")
         return
 
+    # Iterate over all spaces from Kaiten
     for space in kaiten_spaces:
         # Set space_name as Kaiten Project name only (as requested)
-        space_name = space.get('name', f"Kaiten Space {space['id']}")
+        space_name = space.get('title', f"Kaiten Space {space['id']}")
         logger.info(f"Processing space: {space_name}")
 
         # Create a new project in Planka for this space
         try:
+            ic(space_name)
             project = planka_client.create_project(
                 name=space_name,  # Only the Kaiten Project name, nothing else
                 description=" ",  # Space character instead of empty string to avoid API error
                 type="private"
             )
+            
+            # Check if project was created successfully
+            if not project or 'id' not in project:
+                logger.error(f"Failed to create project in Planka for space {space_name}. Response: {project}")
+                continue  # Skip to the next space
+                
             project_id = project['id']
-            logger.info(f"Created new project in Planka: {project['name']}")
+            logger.info(f"Created new project in Planka: {project.get('name', project_id)}")
 
             # Get boards for this space
             kaiten_boards = kaiten_client.get_boards_for_space(space['id'])
@@ -82,11 +91,12 @@ def main():
                 migrator.migrate_space_data(project_id, kaiten_boards)
             else:
                 logger.info(f"No boards found in space: {space_name}")
-
+        
         except Exception as e:
-            logger.error(f"Failed to migrate space {space_name}: {e}")
+            logger.error(f"An error occurred while processing space {space_name}: {e}")
+            continue
     
-    logger.info("Migration completed successfully")
+    logger.info("Migration process finished.")
 
 
 if __name__ == "__main__":
