@@ -41,6 +41,22 @@ class KaitenClient:
             logger.error(f"An exception occurred while getting spaces: {e}")
             return []
 
+    def get_columns(self, board_id: int) -> List[Dict[str, Any]]:
+        """Get all columns (lists) for a specific board from Kaiten."""
+        try:
+            import requests
+            columns_url = f"{self.api_url}/api/v1/boards/{board_id}/columns"
+            logger.info(f"Fetching columns from URL: {columns_url}")
+            response = requests.get(columns_url, headers=self.client.headers)
+            logger.info(f"Received response with status code: {response.status_code}")
+            if response.status_code != 200:
+                logger.error(f"Error response from server: {response.text}")
+                return []
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error getting columns for board {board_id}: {e}")
+            return []
+
     def get_boards_for_space(self, space_id: int) -> List[Dict[str, Any]]:
         """Get all boards for a specific space from Kaiten."""
         try:

@@ -61,7 +61,7 @@ def main():
         logger.warning("No spaces found in Kaiten. Nothing to migrate.")
         return
 
-    # Iterate over all spaces from Kaiten
+    # Process all spaces from Kaiten
     for space in kaiten_spaces:
         # Set space_name as Kaiten Project name only (as requested)
         space_name = space.get('title', f"Kaiten Space {space['id']}")

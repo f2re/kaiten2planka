@@ -66,11 +66,41 @@ class KaitenToPlankaMigrator:
 
     def migrate_lists_and_cards(self, kaiten_board_id: int, planka_board_id: str):
         """Migrate lists and cards from a Kaiten board to a Planka board."""
-        # First, create default list since Planka requires at least one list
-        default_list = self.planka_client.create_list(
-            board_id=planka_board_id,
-            name="Default List"
-        )
+        # Get columns (lists) from Kaiten board
+        kaiten_columns = self.kaiten_client.get_columns(kaiten_board_id)
+        
+        # Create a mapping from Kaiten column ID to Planka list ID
+        column_to_list_map = {}
+        
+        # Create lists in Planka for each column
+        for i, kaiten_column in enumerate(kaiten_columns):
+            try:
+                planka_list = self.planka_client.create_list(
+                    board_id=planka_board_id,
+                    name=kaiten_column['title'],
+                    position=i * 65535  # Spread out positions
+                )
+                if planka_list and 'id' in planka_list:
+                    column_to_list_map[kaiten_column['id']] = planka_list['id']
+                    logger.info(f"Created list: {kaiten_column['title']}")
+                else:
+                    logger.error(f"Failed to create list {kaiten_column['title']}")
+            except Exception as e:
+                logger.error(f"Failed to create list {kaiten_column['title']}: {e}")
+        
+        # If no columns were created, create a default list to avoid errors
+        if not column_to_list_map:
+            default_list = self.planka_client.create_list(
+                board_id=planka_board_id,
+                name="Default List"
+            )
+            if default_list and 'id' in default_list:
+                # We'll put all cards in this default list
+                default_list_id = default_list['id']
+                logger.info("Created default list")
+            else:
+                logger.error("Failed to create default list")
+                return
         
         # Get cards from Kaiten board
         kaiten_cards = self.kaiten_client.get_cards(kaiten_board_id)
@@ -80,14 +110,25 @@ class KaitenToPlankaMigrator:
                 # Get detailed card information
                 card_details = self.kaiten_client.get_card_details(kaiten_card['id'])
                 
-                # Create card in Planka (using default list for now)
+                # Determine which list this card should go to
+                target_list_id = None
+                if 'column_id' in kaiten_card and kaiten_card['column_id'] in column_to_list_map:
+                    target_list_id = column_to_list_map[kaiten_card['column_id']]
+                elif column_to_list_map:
+                    # Put in the first available list
+                    target_list_id = next(iter(column_to_list_map.values()))
+                else:
+                    # Put in default list
+                    target_list_id = default_list_id
+                
+                # Create card in Planka
                 planka_card = self.planka_client.create_card(
-                    list_id=default_list['id'],
+                    list_id=target_list_id,
                     name=kaiten_card['title'],
                     description=card_details.get('description', ''),
                 )
                 
-                logger.info(f"Created card: {kaiten_card['title']}")
+                logger.info(f"Created card: {kaiten_card['title']} in list {target_list_id}")
                 
                 # TODO: Migrate checklists, attachments, comments, etc.
             except Exception as e:
@@ -152,46 +193,35 @@ class KaitenToPlankaMigrator:
             logger.warning("No spaces found in Kaiten. Nothing to migrate.")
             return
 
-        # Find the "MAD Team" space
-        mad_team_space = None
+        # Process all spaces from Kaiten
         for space in kaiten_spaces:
-            if space.get('title') == 'MAD Team':
-                mad_team_space = space
-                break
+            space_name = space.get('title', f"Kaiten Space {space['id']}")
+            logger.info(f"Processing space: {space_name}")
 
-        if not mad_team_space:
-            logger.error("MAD Team space not found in Kaiten. Nothing to migrate.")
-            return
-
-        # Process only the "MAD Team" space
-        space = mad_team_space
-        space_name = space.get('title', f"Kaiten Space {space['id']}")
-        logger.info(f"Processing space: {space_name}")
-
-        # Create a new project in Planka for this space
-        try:
-            project = self.planka_client.create_project(
-                name=space_name,
-                description=" ",  # Space character instead of empty string to avoid API error
-                type="private"
-            )
-            
-            # Check if project was created successfully
-            if not project or 'id' not in project:
-                logger.error(f"Failed to create project in Planka. Response: {project}")
-                return
+            # Create a new project in Planka for this space
+            try:
+                project = self.planka_client.create_project(
+                    name=space_name,
+                    description=" ",  # Space character instead of empty string to avoid API error
+                    type="private"
+                )
                 
-            project_id = project['id']
-            logger.info(f"Created new project in Planka: {project.get('name', project_id)}")
+                # Check if project was created successfully
+                if not project or 'id' not in project:
+                    logger.error(f"Failed to create project in Planka for space {space_name}. Response: {project}")
+                    continue  # Skip to the next space
+                    
+                project_id = project['id']
+                logger.info(f"Created new project in Planka: {project.get('name', project_id)}")
 
-            # Get boards for this space
-            kaiten_boards = self.kaiten_client.get_boards_for_space(space['id'])
-            if kaiten_boards:
-                # Perform migration for this space's data
-                self.migrate_boards(project_id, kaiten_boards)
-            else:
-                logger.info(f"No boards found in space: {space_name}")
+                # Get boards for this space
+                kaiten_boards = self.kaiten_client.get_boards_for_space(space['id'])
+                if kaiten_boards:
+                    # Perform migration for this space's data
+                    self.migrate_boards(project_id, kaiten_boards)
+                else:
+                    logger.info(f"No boards found in space: {space_name}")
 
-        except Exception as e:
-            logger.error(f"Failed to migrate space {space_name}: {e}")
-            logger.exception("Exception details:")
+            except Exception as e:
+                logger.error(f"An error occurred while processing space {space_name}: {e}")
+                continue
