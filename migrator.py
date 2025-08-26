@@ -128,11 +128,108 @@ class KaitenToPlankaMigrator:
                     description=card_details.get('description', ''),
                 )
                 
-                logger.info(f"Created card: {kaiten_card['title']} in list {target_list_id}")
-                
-                # TODO: Migrate checklists, attachments, comments, etc.
+                if planka_card and 'id' in planka_card:
+                    planka_card_id = planka_card['id']
+                    logger.info(f"Created card: {kaiten_card['title']} in list {target_list_id}")
+                    
+                    # Migrate checklists for this card
+                    self.migrate_checklists(kaiten_card['id'], planka_card_id)
+                    
+                    # Migrate attachments for this card
+                    self.migrate_attachments(kaiten_card['id'], planka_card_id)
+                else:
+                    logger.error(f"Failed to create card {kaiten_card['title']}")
             except Exception as e:
                 logger.error(f"Failed to create card {kaiten_card['title']}: {e}")
+
+    def migrate_checklists(self, kaiten_card_id: int, planka_card_id: str):
+        """Migrate checklists from a Kaiten card to a Planka card."""
+        try:
+            kaiten_checklists = self.kaiten_client.get_checklists(kaiten_card_id)
+            
+            for checklist in kaiten_checklists:
+                # Create checklist in Planka
+                planka_checklist = self.planka_client.create_checklist(
+                    card_id=planka_card_id,
+                    name=checklist.get('title', 'Checklist')
+                )
+                
+                if planka_checklist and 'id' in planka_checklist:
+                    planka_checklist_id = planka_checklist['id']
+                    logger.info(f"Created checklist: {checklist.get('title', 'Checklist')}")
+                    
+                    # Migrate checklist items
+                    items = checklist.get('items', [])
+                    for item in items:
+                        self.planka_client.create_checklist_item(
+                            task_id=planka_checklist_id,
+                            name=item.get('text', ''),
+                            is_completed=item.get('checked', False)
+                        )
+                else:
+                    logger.error(f"Failed to create checklist {checklist.get('title', 'Checklist')}")
+        except Exception as e:
+            logger.error(f"Error migrating checklists for card {kaiten_card_id}: {e}")
+
+    def migrate_attachments(self, kaiten_card_id: int, planka_card_id: str):
+        """Migrate attachments from a Kaiten card to a Planka card."""
+        try:
+            kaiten_attachments = self.kaiten_client.get_attachments(kaiten_card_id)
+            
+            for attachment in kaiten_attachments:
+                # Download attachment from Kaiten
+                attachment_url = attachment.get('url')
+                attachment_name = attachment.get('name', 'attachment')
+                
+                if attachment_url:
+                    # Create a temporary file to download the attachment
+                    import tempfile
+                    import os
+                    import requests
+                    
+                    try:
+                        response = requests.get(attachment_url)
+                        if response.status_code == 200:
+                            # Check content length if available
+                            content_length = response.headers.get('content-length')
+                            if content_length and int(content_length) > 10 * 1024 * 1024:  # 10MB
+                                logger.warning(f"Skipping attachment {attachment_name} - file too large ({int(content_length)} bytes)")
+                                continue
+                            
+                            # Create a temporary file
+                            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                                tmp_file.write(response.content)
+                                tmp_file_path = tmp_file.name
+                            
+                            # Check file size
+                            file_size = os.path.getsize(tmp_file_path)
+                            if file_size > 10 * 1024 * 1024:  # 10MB
+                                logger.warning(f"Skipping attachment {attachment_name} - file too large ({file_size} bytes)")
+                                os.unlink(tmp_file_path)
+                                continue
+                            
+                            # Upload to Planka
+                            result = self.planka_client.upload_attachment(
+                                card_id=planka_card_id,
+                                file_path=tmp_file_path,
+                                file_name=attachment_name
+                            )
+                            
+                            # Clean up temporary file
+                            os.unlink(tmp_file_path)
+                            
+                            if result and 'id' in result:
+                                logger.info(f"Uploaded attachment: {attachment_name}")
+                            else:
+                                logger.warning(f"Failed to upload attachment: {attachment_name}")
+                        else:
+                            logger.error(f"Failed to download attachment {attachment_name}: HTTP {response.status_code}")
+                    except Exception as e:
+                        logger.error(f"Error downloading/uploading attachment {attachment_name}: {e}")
+                else:
+                    logger.warning(f"Attachment {attachment_name} has no URL")
+        except Exception as e:
+            logger.error(f"Error migrating attachments for card {kaiten_card_id}: {e}")
 
     def migrate_tags(self, planka_board_id: str):
         """Migrate tags from Kaiten to labels in Planka."""

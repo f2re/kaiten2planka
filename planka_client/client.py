@@ -209,7 +209,7 @@ class PlankaClient:
             }
             data = {
                 "name": name,
-                "description": description,
+                "description": description if description else " ",  # Use space instead of empty string
                 "position": position,
                 "type": type
             }
@@ -227,6 +227,107 @@ class PlankaClient:
                 return {}
         except Exception as e:
             logger.error(f"Error creating card: {e}")
+            return {}
+
+    def create_checklist(self, card_id: str, name: str) -> Dict[str, Any]:
+        """Create a new checklist (task) in Planka."""
+        try:
+            url = f"{self.api_url}/cards/{card_id}/tasks"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "name": name
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            if response.status_code in [200, 201]:
+                result = response.json()
+                checklist_data = result.get('item', {})
+                return {
+                    'id': checklist_data.get('id'),
+                    'name': checklist_data.get('name')
+                }
+            else:
+                logger.error(f"Error creating checklist: HTTP {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error creating checklist: {e}")
+            return {}
+
+    def create_checklist_item(self, task_id: str, name: str, is_completed: bool = False) -> Dict[str, Any]:
+        """Create a new item in a checklist (task-item) in Planka."""
+        try:
+            url = f"{self.api_url}/tasks/{task_id}/task-items"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "name": name,
+                "isCompleted": is_completed
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            if response.status_code in [200, 201]:
+                result = response.json()
+                item_data = result.get('item', {})
+                return {
+                    'id': item_data.get('id'),
+                    'name': item_data.get('name'),
+                    'isCompleted': item_data.get('isCompleted', False)
+                }
+            else:
+                logger.error(f"Error creating checklist item: HTTP {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error creating checklist item: {e}")
+            return {}
+
+    def upload_attachment(self, card_id: str, file_path: str, file_name: str = None) -> Dict[str, Any]:
+        """Upload an attachment to a card in Planka."""
+        try:
+            url = f"{self.api_url}/cards/{card_id}/attachments"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}"
+            }
+            
+            # If file_name is not provided, use the basename of file_path
+            if not file_name:
+                import os
+                file_name = os.path.basename(file_path)
+            
+            # Check file size (Planka has limits)
+            import os
+            file_size = os.path.getsize(file_path)
+            max_size = 10 * 1024 * 1024  # 10MB limit
+            
+            if file_size > max_size:
+                logger.warning(f"File {file_name} is too large ({file_size} bytes). Skipping upload.")
+                return {}
+            
+            with open(file_path, 'rb') as f:
+                # Correct way to send file with form data
+                files = {'attachment': (file_name, f, 'application/octet-stream')}
+                # Send form fields as data
+                data = {
+                    'name': file_name
+                }
+                response = requests.post(url, headers=headers, files=files, data=data)
+                
+            if response.status_code in [200, 201]:
+                result = response.json()
+                attachment_data = result.get('item', {})
+                return {
+                    'id': attachment_data.get('id'),
+                    'name': attachment_data.get('name')
+                }
+            else:
+                logger.error(f"Error uploading attachment: HTTP {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error uploading attachment: {e}")
             return {}
 
     def get_users(self) -> List[Dict[str, Any]]:
