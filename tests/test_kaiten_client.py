@@ -34,6 +34,7 @@ class TestKaitenClient(unittest.TestCase):
             'get_users',
             'get_tags',
             'get_checklists',
+            'get_checklist_details',
             'get_attachments'
         ]
         

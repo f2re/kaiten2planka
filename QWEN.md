@@ -51,7 +51,6 @@ This project is called `kaiten2planka`. It is a Python application for migrate d
 
 ## Workflow Preferences
 
-- Always verify changes with relevant tests.
 - Run linters and type checkers before committing.
 - Provide clear and concise explanations for significant changes.
 - Ask for clarification if requirements are ambiguous.

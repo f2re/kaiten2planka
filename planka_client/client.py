@@ -5,11 +5,7 @@ Planka API client for sending data.
 import logging
 import requests
 from typing import Dict, Any, List
-from urllib.parse import urljoin
 from plankapy import Planka, TokenAuth
-
-# Import and apply patches to plankapy
-from .patcher import patch_plankapy
 
 logger = logging.getLogger(__name__)
 
@@ -91,20 +87,29 @@ class PlankaClient:
     def create_board(self, project_id: str, name: str, description: str = "", type: str = "kanban", position: int = 65535) -> Dict[str, Any]:
         """Create a new board in Planka."""
         try:
-            # Find the project
-            project = None
-            for p in self.client.projects:
-                if p.id == project_id:
-                    project = p
-                    break
+            # Use direct HTTP request instead of plankapy's create_board method
+            # which has compatibility issues
+            url = f"{self.api_url}/projects/{project_id}/boards"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "name": name,
+                "position": position
+            }
             
-            if not project:
-                logger.error(f"Project {project_id} not found")
+            response = requests.post(url, headers=headers, json=data)
+            if response.status_code in [200, 201]:
+                result = response.json()
+                board_data = result.get('item', {})
+                return {
+                    'id': board_data.get('id'),
+                    'name': board_data.get('name')
+                }
+            else:
+                logger.error(f"Error creating board: HTTP {response.status_code} - {response.text}")
                 return {}
-            
-            # Create the board
-            board = project.create_board(name=name)
-            return {'id': board.id, 'name': board.name}
         except Exception as e:
             logger.error(f"Error creating board: {e}")
             return {}
@@ -285,7 +290,7 @@ class PlankaClient:
             logger.error(f"Error creating checklist item: {e}")
             return {}
 
-    def upload_attachment(self, card_id: str, file_path: str, file_name: str = None) -> Dict[str, Any]:
+    def upload_attachment(self, card_id: str, file_path: str, file_name: str | None = None) -> Dict[str, Any]:
         """Upload an attachment to a card in Planka."""
         try:
             url = f"{self.api_url}/cards/{card_id}/attachments"
@@ -301,20 +306,20 @@ class PlankaClient:
             # Check file size (Planka has limits)
             import os
             file_size = os.path.getsize(file_path)
-            max_size = 10 * 1024 * 1024  # 10MB limit
+            max_size = 10 * 1024 * 1024  # 10MB
             
             if file_size > max_size:
                 logger.warning(f"File {file_name} is too large ({file_size} bytes). Skipping upload.")
                 return {}
             
+            # Try with "file" field name instead of "attachment"
             with open(file_path, 'rb') as f:
-                # Correct way to send file with form data
-                files = {'attachment': (file_name, f, 'application/octet-stream')}
-                # Send form fields as data
-                data = {
-                    'name': file_name
+                files = {
+                    'file': (file_name, f, 'application/octet-stream'),
+                    'name': (None, file_name, 'text/plain'),
+                    'type': (None, 'file', 'text/plain')
                 }
-                response = requests.post(url, headers=headers, files=files, data=data)
+                response = requests.post(url, headers=headers, files=files)
                 
             if response.status_code in [200, 201]:
                 result = response.json()
@@ -378,28 +383,29 @@ class PlankaClient:
     def create_label(self, board_id: str, name: str, color: str = "#CCCCCC") -> Dict[str, Any]:
         """Create a new label in Planka."""
         try:
-            # Find the board across all projects
-            board_obj = None
-            for project in self.client.projects:
-                try:
-                    for board in project.boards:
-                        if board.id == board_id:
-                            board_obj = board
-                            break
-                except Exception as e:
-                    logger.debug(f"Could not get boards for project {project.id}: {e}")
-                if board_obj:
-                    break
+            # Use direct HTTP request to create the label
+            url = f"{self.api_url}/boards/{board_id}/labels"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "name": name,
+                "color": color
+            }
             
-            if not board_obj:
-                logger.error(f"Board {board_id} not found")
+            response = requests.post(url, headers=headers, json=data)
+            if response.status_code in [200, 201]:
+                result = response.json()
+                label_data = result.get('item', {})
+                return {
+                    'id': label_data.get('id'),
+                    'name': label_data.get('name'),
+                    'color': label_data.get('color')
+                }
+            else:
+                logger.error(f"Error creating label: HTTP {response.status_code} - {response.text}")
                 return {}
-            
-            # Create the label
-            # Note: plankapy doesn't seem to have a direct method for creating labels
-            # We'll need to use the raw API call
-            logger.warning("Label creation not implemented in plankapy wrapper")
-            return {}
         except Exception as e:
             logger.error(f"Error creating label: {e}")
             return {}
@@ -501,6 +507,7 @@ class PlankaClient:
             
             # 1) Get all lists for this board
             lists = board_obj.lists
+            logger.debug(f"Found {len(lists)} lists in board {board_id}")
             
             # 2) For each list - get cards and delete them
             for lst in lists:
@@ -508,6 +515,7 @@ class PlankaClient:
                 
                 # Get all cards in this list
                 cards = lst.cards
+                logger.debug(f"Found {len(cards)} cards in list {list_id}")
                 
                 # Delete each card
                 for card in cards:
@@ -543,8 +551,29 @@ class PlankaClient:
                     logger.error(f"Error deleting list {list_id}: {e}")
                     # Continue with other lists even if one fails
             
+            # Wait a moment for changes to propagate
+            import time
+            time.sleep(0.5)
+            
             # 3) Delete the board itself
             try:
+                # Find the board again just before deletion
+                board_obj = None
+                for project in self.client.projects:
+                    try:
+                        for board in project.boards:
+                            if board.id == board_id:
+                                board_obj = board
+                                break
+                    except Exception as e:
+                        logger.debug(f"Could not get boards for project {project.id} before final deletion: {e}")
+                    if board_obj:
+                        break
+                
+                if not board_obj:
+                    logger.warning(f"Board {board_id} not found (already deleted)")
+                    return True
+                    
                 board_obj.delete()
                 logger.debug(f"Successfully deleted board {board_id} with all contents")
                 return True
@@ -604,8 +633,23 @@ class PlankaClient:
                 logger.warning(f"Error getting/deleting boards for project {project_id}: {e}")
                 # Continue anyway
             
+            # Wait a moment for changes to propagate
+            import time
+            time.sleep(1.0)
+            
             # Now try to delete the project
             try:
+                # Find the project again just before deletion
+                project_obj = None
+                for project in self.client.projects:
+                    if project.id == project_id:
+                        project_obj = project
+                        break
+                
+                if not project_obj:
+                    logger.warning(f"Project {project_id} not found (already deleted)")
+                    return True
+                    
                 project_obj.delete()
                 logger.info(f"Successfully deleted project {project_id}")
                 return True
@@ -618,16 +662,41 @@ class PlankaClient:
                     # Handle "Must not have boards" error
                     error_msg = http_err.response.text if http_err.response else "No response"
                     logger.error(f"Cannot delete project {project_id}: {error_msg}")
-                    # Try one more time after a short delay
+                    # Try one more time after a longer delay
                     import time
-                    time.sleep(1.0)
+                    time.sleep(2.0)
+                    
                     try:
-                        project_obj.delete()
-                        logger.info(f"Successfully deleted project {project_id} on retry")
-                        return True
-                    except Exception as retry_e:
-                        logger.error(f"Retry failed for project {project_id}: {retry_e}")
-                        return False
+                        # Find the project again
+                        project_obj = None
+                        for project in self.client.projects:
+                            if project.id == project_id:
+                                project_obj = project
+                                break
+                        
+                        if project_obj:
+                            # Check if it still has boards
+                            boards = project_obj.boards
+                            if len(boards) > 0:
+                                logger.debug(f"Project {project_id} still has {len(boards)} boards after delay")
+                                # Try to delete them again
+                                for board in boards:
+                                    board_id = board.id
+                                    if not self.delete_board_with_contents(board_id):
+                                        logger.error(f"Failed to delete board {board_id} on retry")
+                                
+                                # Wait a bit more for changes to propagate
+                                time.sleep(1.0)
+                        
+                        # Try one more time to delete the project
+                        if project_obj:
+                            project_obj.delete()
+                            logger.info(f"Successfully deleted project {project_id} on retry")
+                            return True
+                    except Exception as refresh_e:
+                        logger.error(f"Refresh failed for project {project_id}: {refresh_e}")
+                    
+                    return False
                 else:
                     logger.error(f"HTTP error deleting project {project_id}: {http_err}")
                     logger.error(f"Response body: {http_err.response.text if http_err.response else 'No response'}")
@@ -644,7 +713,7 @@ class PlankaClient:
         """
         Delete all boards and projects from Planka.
         
-        First deletes all boards, then deletes all projects.
+        First deletes all boards with their contents, then deletes all projects.
         
         Returns:
             bool: True if successful, False otherwise
@@ -652,22 +721,50 @@ class PlankaClient:
         try:
             logger.info("Starting to delete all boards and projects...")
             
-            # 1. Get all boards
-            boards = self.get_boards()
-            logger.info(f"Found {len(boards)} boards to delete")
+            # 1. Get all projects first
+            projects = self.get_projects()
+            logger.info(f"Found {len(projects)} projects to process")
             
-            # 2. Delete all boards
-            for board in boards:
-                board_id = board['id']
-                if not self.delete_board_with_contents(board_id):
-                    logger.error(f"Failed to delete board {board_id}")
-                    # Continue with other boards even if one fails
+            # 2. For each project, delete all boards with their contents
+            for project in projects:
+                project_id = project['id']
+                try:
+                    logger.debug(f"Processing project {project_id}")
+                    
+                    # Get boards for this specific project
+                    project_obj = None
+                    for p in self.client.projects:
+                        if p.id == project_id:
+                            project_obj = p
+                            break
+                    
+                    if not project_obj:
+                        logger.warning(f"Project {project_id} not found in client projects")
+                        continue
+                    
+                    # Get all boards in this project
+                    boards = project_obj.boards
+                    logger.info(f"Found {len(boards)} boards in project {project_id}")
+                    
+                    # Delete all boards with their contents
+                    for board in boards:
+                        board_id = board.id
+                        if not self.delete_board_with_contents(board_id):
+                            logger.error(f"Failed to delete board {board_id}")
+                            # Continue with other boards even if one fails
+                
+                except Exception as e:
+                    logger.error(f"Error processing project {project_id}: {e}")
+                    # Continue with other projects even if one fails
             
-            # 3. Get all projects
+            # 3. Wait a moment for changes to propagate and refresh client data
+            import time
+            time.sleep(1.0)
+            
+            # 4. Now delete all projects
             projects = self.get_projects()
             logger.info(f"Found {len(projects)} projects to delete")
             
-            # 4. Delete all projects
             for project in projects:
                 project_id = project['id']
                 if not self.delete_project(project_id):

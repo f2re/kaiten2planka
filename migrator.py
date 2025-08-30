@@ -15,10 +15,10 @@ class KaitenToPlankaMigrator:
     def __init__(self, kaiten_client: KaitenClient, planka_client: PlankaClient):
         self.kaiten_client = kaiten_client
         self.planka_client = planka_client
-        self.kaiten_to_planka_user_map = {}
-        self.kaiten_to_planka_board_map = {}
-        self.kaiten_to_planka_list_map = {}
-        self.kaiten_to_planka_label_map = {}
+        self.kaiten_to_planka_user_map: Dict[int, str] = {}
+        self.kaiten_to_planka_board_map: Dict[int, str] = {}
+        self.kaiten_to_planka_list_map: Dict[int, str] = {}
+        self.kaiten_to_planka_label_map: Dict[int, str] = {}
 
     def migrate_users(self):
         """Migrate users from Kaiten to Planka."""
@@ -148,18 +148,26 @@ class KaitenToPlankaMigrator:
             kaiten_checklists = self.kaiten_client.get_checklists(kaiten_card_id)
             
             for checklist in kaiten_checklists:
+                # Get detailed checklist information which includes items
+                checklist_id = checklist.get('id')
+                if checklist_id:
+                    detailed_checklist = self.kaiten_client.get_checklist_details(kaiten_card_id, checklist_id)
+                    items = detailed_checklist.get('items', [])
+                else:
+                    # Fallback to items in the basic checklist info
+                    items = checklist.get('items', [])
+                
                 # Create checklist in Planka
                 planka_checklist = self.planka_client.create_checklist(
                     card_id=planka_card_id,
-                    name=checklist.get('title', 'Checklist')
+                    name=checklist.get('name', 'Checklist')
                 )
                 
                 if planka_checklist and 'id' in planka_checklist:
                     planka_checklist_id = planka_checklist['id']
-                    logger.info(f"Created checklist: {checklist.get('title', 'Checklist')}")
+                    logger.info(f"Created checklist: {checklist.get('name', 'Checklist')}")
                     
                     # Migrate checklist items
-                    items = checklist.get('items', [])
                     for item in items:
                         self.planka_client.create_checklist_item(
                             task_id=planka_checklist_id,
@@ -167,7 +175,7 @@ class KaitenToPlankaMigrator:
                             is_completed=item.get('checked', False)
                         )
                 else:
-                    logger.error(f"Failed to create checklist {checklist.get('title', 'Checklist')}")
+                    logger.error(f"Failed to create checklist {checklist.get('name', 'Checklist')}")
         except Exception as e:
             logger.error(f"Error migrating checklists for card {kaiten_card_id}: {e}")
 

@@ -1,0 +1,9 @@
+{
+    "autoApprove": true,
+    "allowFileEdits": true,
+    "allowCommandExecution": true,
+    "contextWindow": "maximum",
+    "editFormat": "diff",
+    "streaming": true
+  }
+  

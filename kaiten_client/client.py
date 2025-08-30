@@ -5,7 +5,7 @@ Uses the official kaiten package.
 
 import logging
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from kaiten import KaitenClient as KaitenAPIClient
 
 logger = logging.getLogger(__name__)
@@ -99,8 +99,14 @@ class KaitenClient:
     def get_card_details(self, card_id: int) -> Dict[str, Any]:
         """Get detailed information about a specific card."""
         try:
-            card = self.client.get_card(card_id)
-            return card.__dict__
+            import requests
+            card_url = f"{self.api_url}/api/v1/cards/{card_id}"
+            response = requests.get(card_url, headers=self.client.headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Error getting card details for card {card_id}: {response.status_code} - {response.text}")
+                return {}
         except Exception as e:
             logger.error(f"Error getting card details for card {card_id}: {e}")
             return {}
@@ -128,19 +134,27 @@ class KaitenClient:
     def get_checklists(self, card_id: int) -> List[Dict[str, Any]]:
         """Get all checklists for a specific card."""
         try:
-            # Checklists are not directly available in the kaiten package
-            # We need to make a direct API call
-            import requests
-            checklists_url = f"{self.client.base_api_url}/cards/{card_id}/checklists"
-            response = requests.get(checklists_url, headers=self.client.headers)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"Error getting checklists for card {card_id}: {response.status_code}")
-                return []
+            # Checklists are included in the card details
+            card_details = self.get_card_details(card_id)
+            return card_details.get('checklists', [])
         except Exception as e:
             logger.error(f"Error getting checklists for card {card_id}: {e}")
             return []
+
+    def get_checklist_details(self, card_id: int, checklist_id: int) -> Dict[str, Any]:
+        """Get detailed information about a specific checklist."""
+        try:
+            import requests
+            checklist_url = f"{self.api_url}/api/v1/cards/{card_id}/checklists/{checklist_id}"
+            response = requests.get(checklist_url, headers=self.client.headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Error getting checklist details for checklist {checklist_id} on card {card_id}: {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error getting checklist details for checklist {checklist_id} on card {card_id}: {e}")
+            return {}
 
     def get_attachments(self, card_id: int) -> List[Dict[str, Any]]:
         """Get all attachments for a specific card."""
@@ -148,12 +162,13 @@ class KaitenClient:
             # Attachments are not directly available in the kaiten package
             # We need to make a direct API call
             import requests
-            attachments_url = f"{self.client.base_api_url}/cards/{card_id}/files"
+            # Use the original URL with /api/v1 prefix
+            attachments_url = f"{self.api_url}/api/v1/cards/{card_id}/files"
             response = requests.get(attachments_url, headers=self.client.headers)
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.error(f"Error getting attachments for card {card_id}: {response.status_code}")
+                logger.error(f"Error getting attachments for card {card_id}: {response.status_code} - {response.text}")
                 return []
         except Exception as e:
             logger.error(f"Error getting attachments for card {card_id}: {e}")

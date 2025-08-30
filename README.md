@@ -77,10 +77,10 @@ Currently, the tool migrates:
 - Boards
 - Cards (titles and descriptions)
 - Users
+- Checklists (with items)
 
 Planned migrations:
 - Tags to labels
-- Checklists
 - Attachments
 - Comments
 - Card positions
@@ -92,6 +92,19 @@ Planned migrations:
 - `utils.py`: Connection testing and utility functions
 - `test_imports.py`: Module import verification
 - `run_tests.py`: Test runner for all tests
+- `example_checklist_migration.py`: Example script demonstrating checklist migration
+
+## Checklist Migration
+
+The tool now supports migrating checklists from Kaiten to Planka. Checklists are migrated as TaskLists in Planka, with individual checklist items becoming TaskItems.
+
+To migrate checklists for a specific card, you can use the example script:
+```bash
+source venv/bin/activate
+python example_checklist_migration.py
+```
+
+Or integrate the checklist migration into your existing migration process using the `migrate_checklists` method in the `KaitenToPlankaMigrator` class.
 
 ## Customization
 

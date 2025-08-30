@@ -1,2 +1,0 @@
-        project_route = self.routes.get_project(id=self.projectId)
-        return Project(**{k: v for k, v in project_route()['item'].items() if k in ['id', 'name', 'background', 'backgroundImage', 'createdAt', 'updatedAt']}).bind(self.routes)
