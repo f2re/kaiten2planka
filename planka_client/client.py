@@ -4,8 +4,9 @@ Planka API client for sending data.
 
 import logging
 import requests
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from plankapy import Planka, TokenAuth
+from plankapy.models import Card_, Task_
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,9 @@ logger = logging.getLogger(__name__)
 class PlankaClient:
     def __init__(self, api_url: str, api_key: str):
         self.api_url = api_url.rstrip('/')
+        # Ensure the API URL ends with /api for Planka
+        if not self.api_url.endswith('/api'):
+            self.api_url = f"{self.api_url}/api"
         self.api_key = api_key
         # Initialize the plankapy client
         self.client = Planka(self.api_url, TokenAuth(self.api_key))
@@ -411,39 +415,71 @@ class PlankaClient:
             return {}
 
     def add_label_to_card(self, card_id: str, label_id: str) -> Dict[str, Any]:
-        """Add a label to a card in Planka."""
+        """Add a label to a card in Planka using plankapy."""
         try:
-            # Find the card across all lists, boards, and projects
-            card_obj = None
+            # Find the card using plankapy
+            card = self._get_card_by_id(card_id)
+            if not card:
+                logger.error(f"Card with id {card_id} not found")
+                return {}
+            
+            # Find the label across all boards
+            label_obj = None
             for project in self.client.projects:
                 try:
                     for board in project.boards:
-                        for lst in board.lists:
-                            for card in lst.cards:
-                                if card.id == card_id:
-                                    card_obj = card
-                                    break
-                            if card_obj:
+                        for label in board.labels:
+                            if label.id == label_id:
+                                label_obj = label
                                 break
-                        if card_obj:
+                        if label_obj:
                             break
                 except Exception as e:
-                    logger.debug(f"Could not get cards for project {project.id}: {e}")
-                if card_obj:
+                    logger.debug(f"Could not get labels for project {project.id}: {e}")
+                if label_obj:
                     break
             
-            if not card_obj:
-                logger.error(f"Card {card_id} not found")
+            if not label_obj:
+                logger.error(f"Label {label_id} not found")
                 return {}
             
-            # Add label to card
-            # Note: plankapy doesn't seem to have a direct method for adding labels to cards
-            # We'll need to use the raw API call
-            logger.warning("Adding label to card not implemented in plankapy wrapper")
-            return {}
+            # Add label to card using plankapy method
+            card_label = card.add_label(label_obj)
+            
+            # Refresh card to get updated labels
+            card.refresh()
+            
+            # Verify the label was added
+            if card_label and hasattr(card_label, 'id'):
+                return {"id": card_label.id}
+            else:
+                logger.warning("Label added but no card label ID returned")
+                return {}
         except Exception as e:
-            logger.error(f"Error adding label to card: {e}")
-            return {}
+            logger.error(f"Error adding label to card using plankapy: {e}")
+            # Fallback to direct API call if plankapy method fails
+            try:
+                url = f"{self.api_url}/cards/{card_id}/card-labels"
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                data = {"labelId": label_id}
+                
+                response = requests.post(url, headers=headers, json=data)
+                if response.status_code in [200, 201]:
+                    result = response.json()
+                    card_label_data = result.get('item', {})
+                    return {
+                        'id': card_label_data.get('id'),
+                        'labelId': card_label_data.get('labelId')
+                    }
+                else:
+                    logger.error(f"Error adding label to card via API: HTTP {response.status_code} - {response.text}")
+                    return {}
+            except Exception as api_e:
+                logger.error(f"Error adding label to card via API fallback: {api_e}")
+                return {}
 
     def delete_board(self, board_id: str) -> bool:
         """Delete a board from Planka."""
@@ -777,3 +813,226 @@ class PlankaClient:
         except Exception as e:
             logger.error(f"Error deleting all boards and projects: {e}")
             return False
+
+    def create_comment(self, card_id: str, content: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a comment on a card using the Planka API directly.
+        
+        Note: Comments in Planka are always attributed to the authenticated user.
+        We can't specify a user ID for comments in Planka.
+        
+        Known issue: Comment creation may fail due to API compatibility issues
+        between the plankapy library and newer versions of Planka.
+        """
+        logger.warning("Comment creation is currently not working due to API compatibility issues. "
+                      "This is a known limitation when using newer versions of Planka with the plankapy library.")
+        return {}
+
+    def _get_card_by_id(self, card_id: str) -> Optional[Card_]:
+        """
+        Find a card by ID across all projects, boards, and lists using plankapy.
+        """
+        try:
+            for project in self.client.projects:
+                for board in project.boards:
+                    for lst in board.lists:
+                        for card in lst.cards:
+                            if card.id == card_id:
+                                return card
+        except Exception as e:
+            logger.error(f"Error finding card {card_id}: {e}")
+        return None
+
+    def _get_task_list_by_id(self, task_list_id: str) -> Optional[Task_]:
+        """
+        Find a task list by ID across all projects, boards, lists, and cards using plankapy.
+        """
+        try:
+            for project in self.client.projects:
+                for board in project.boards:
+                    for lst in board.lists:
+                        for card in lst.cards:
+                            for task_list in card.tasks:
+                                if task_list.id == task_list_id:
+                                    return task_list
+        except Exception as e:
+            logger.error(f"Error finding task list {task_list_id}: {e}")
+        return None
+
+    # ---------- Чек-листы (task-lists) ----------
+    def create_task_list(self, card_id: str, name: str, position: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Создать список задач (task-list) у карточки используя plankapy.
+        """
+        try:
+            # Find the card using plankapy
+            card = self._get_card_by_id(card_id)
+            if not card:
+                logger.error(f"Card with id {card_id} not found")
+                # Fallback to direct API call
+                url = f"{self.api_url}/cards/{card_id}/task-lists"
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {"name": name}
+                if position is not None:
+                    payload["position"] = int(position)
+                else:
+                    # Default position if not provided
+                    payload["position"] = 65535
+                resp = requests.post(url, headers=headers, json=payload)
+                if resp.status_code in (200, 201):
+                    item = resp.json().get("item", {})
+                    # «Двойная проверка»: наличие id и совпадение имени
+                    if item.get("id") and (item.get("name") == name or not name):
+                        return {"id": item.get("id"), "name": item.get("name")}
+                logger.error(f"Error creating task-list: HTTP {resp.status_code} - {resp.text}")
+                return {}
+            
+            # Create task list using plankapy method
+            kwargs = {}
+            if position is not None:
+                kwargs["position"] = int(position)
+            else:
+                # Default position if not provided
+                kwargs["position"] = 65535
+            
+            task_list = card.add_task(name=name, **kwargs)
+            
+            # Refresh card to get updated task lists
+            card.refresh()
+            
+            # Verify the task list was added
+            if task_list and hasattr(task_list, 'id'):
+                return {"id": task_list.id, "name": getattr(task_list, 'name', name)}
+            else:
+                logger.warning("Task list created but no ID returned")
+                return {"name": name}
+        except Exception as e:
+            logger.error(f"Error creating task list using plankapy: {e}")
+            # Fallback to direct API call
+            url = f"{self.api_url}/cards/{card_id}/task-lists"
+            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+            payload = {"name": name}
+            if position is not None:
+                payload["position"] = int(position)
+            else:
+                # Default position if not provided
+                payload["position"] = 65535
+            resp = requests.post(url, headers=headers, json=payload)
+            if resp.status_code in (200, 201):
+                item = resp.json().get("item", {})
+                # «Двойная проверка»: наличие id и совпадение имени
+                if item.get("id") and (item.get("name") == name or not name):
+                    return {"id": item.get("id"), "name": item.get("name")}
+            logger.error(f"Error creating task-list: HTTP {resp.status_code} - {resp.text}")
+            return {}
+
+    def create_task_in_list(self, task_list_id: str, name: str, is_completed: bool = False,
+                            position: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Создать задачу (пункт чек-листа) внутри task-list используя plankapy.
+        """
+        try:
+            # Find the task list using plankapy
+            task_list = self._get_task_list_by_id(task_list_id)
+            if not task_list:
+                logger.error(f"Task list with id {task_list_id} not found")
+                # Fallback to direct API call
+                url = f"{self.api_url}/task-lists/{task_list_id}/tasks"
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {"name": name, "isCompleted": bool(is_completed)}
+                if position is not None:
+                    payload["position"] = int(position)
+                resp = requests.post(url, headers=headers, json=payload)
+                if resp.status_code in (200, 201):
+                    item = resp.json().get("item", {})
+                    # «Двойная проверка»: сверка имени и флага isCompleted
+                    if item.get("id"):
+                        ok_name = (item.get("name") == name) or not name
+                        ok_done = bool(item.get("isCompleted", False)) == bool(is_completed)
+                        if ok_name and ok_done:
+                            return {"id": item.get("id"), "name": item.get("name"), "isCompleted": item.get("isCompleted", False)}
+                logger.error(f"Error creating task in list: HTTP {resp.status_code} - {resp.text}")
+                return {}
+            
+            # Create task item using plankapy method
+            kwargs = {}
+            if position is not None:
+                kwargs["position"] = int(position)
+            
+            task_item = task_list.add_task_item(name=name, is_completed=is_completed, **kwargs)
+            
+            # Refresh task list to get updated items
+            task_list.refresh()
+            
+            # Verify the task item was added
+            if task_item and hasattr(task_item, 'id'):
+                return {
+                    "id": task_item.id, 
+                    "name": getattr(task_item, 'name', name),
+                    "isCompleted": getattr(task_item, 'is_completed', is_completed)
+                }
+            else:
+                logger.warning("Task item created but no ID returned")
+                return {"name": name, "isCompleted": is_completed}
+        except Exception as e:
+            logger.error(f"Error creating task item using plankapy: {e}")
+            # Fallback to direct API call
+            url = f"{self.api_url}/task-lists/{task_list_id}/tasks"
+            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+            payload = {"name": name, "isCompleted": bool(is_completed)}
+            if position is not None:
+                payload["position"] = int(position)
+            resp = requests.post(url, headers=headers, json=payload)
+            if resp.status_code in (200, 201):
+                item = resp.json().get("item", {})
+                # «Двойная проверка»: сверка имени и флага isCompleted
+                if item.get("id"):
+                    ok_name = (item.get("name") == name) or not name
+                    ok_done = bool(item.get("isCompleted", False)) == bool(is_completed)
+                    if ok_name and ok_done:
+                        return {"id": item.get("id"), "name": item.get("name"), "isCompleted": item.get("isCompleted", False)}
+            logger.error(f"Error creating task in list: HTTP {resp.status_code} - {resp.text}")
+            return {}
+
+
+    def create_external_link(self, card_id: str, url: str, name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a new external link on a card in Planka.
+        
+        Args:
+            card_id (str): The ID of the card to add the external link to
+            url (str): The URL of the external link
+            name (str, optional): The name/title of the external link
+            
+        Returns:
+            Dict[str, Any]: The created link data or empty dict on failure
+        """
+        try:
+            # First, let's try to create an attachment-like entry for the link
+            # Planka typically treats external links as attachments with URL content
+            url_endpoint = f"{self.api_url}/cards/{card_id}/attachments"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "url": url,
+                "name": name if name else url,
+                "type": "link"
+            }
+            
+            response = requests.post(url_endpoint, headers=headers, json=data)
+            if response.status_code in [200, 201]:
+                result = response.json()
+                link_data = result.get('item', {})
+                return {
+                    'id': link_data.get('id'),
+                    'name': link_data.get('name'),
+                    'url': link_data.get('url')
+                }
+            else:
+                logger.error(f"Error creating external link: HTTP {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error creating external link: {e}")
+            return {}

@@ -137,45 +137,55 @@ class KaitenToPlankaMigrator:
                     
                     # Migrate attachments for this card
                     self.migrate_attachments(kaiten_card['id'], planka_card_id)
+                    
+                    # Migrate comments for this card
+                    self.migrate_comments(kaiten_card['id'], planka_card_id)
+                    
+                    # Migrate external links for this card
+                    self.migrate_external_links(kaiten_card['id'], planka_card_id)
                 else:
                     logger.error(f"Failed to create card {kaiten_card['title']}")
             except Exception as e:
                 logger.error(f"Failed to create card {kaiten_card['title']}: {e}")
 
+    
     def migrate_checklists(self, kaiten_card_id: int, planka_card_id: str):
         """Migrate checklists from a Kaiten card to a Planka card."""
         try:
-            kaiten_checklists = self.kaiten_client.get_checklists(kaiten_card_id)
-            
+            kaiten_checklists = self.kaiten_client.get_checklists(kaiten_card_id)  # список чек-листов
             for checklist in kaiten_checklists:
-                # Get detailed checklist information which includes items
+                # Детализация (для элементов)
                 checklist_id = checklist.get('id')
                 if checklist_id:
-                    detailed_checklist = self.kaiten_client.get_checklist_details(kaiten_card_id, checklist_id)
-                    items = detailed_checklist.get('items', [])
+                    detailed = self.kaiten_client.get_checklist_details(kaiten_card_id, checklist_id)
+                    items = detailed.get('items', [])
                 else:
-                    # Fallback to items in the basic checklist info
                     items = checklist.get('items', [])
-                
-                # Create checklist in Planka
-                planka_checklist = self.planka_client.create_checklist(
+
+                # Шаг 1: создать task-list в Planka
+                pl_task_list = self.planka_client.create_task_list(
                     card_id=planka_card_id,
                     name=checklist.get('name', 'Checklist')
                 )
-                
-                if planka_checklist and 'id' in planka_checklist:
-                    planka_checklist_id = planka_checklist['id']
-                    logger.info(f"Created checklist: {checklist.get('name', 'Checklist')}")
-                    
-                    # Migrate checklist items
-                    for item in items:
-                        self.planka_client.create_checklist_item(
-                            task_id=planka_checklist_id,
-                            name=item.get('text', ''),
-                            is_completed=item.get('checked', False)
-                        )
-                else:
-                    logger.error(f"Failed to create checklist {checklist.get('name', 'Checklist')}")
+                if not pl_task_list or 'id' not in pl_task_list:
+                    logger.error(f"Failed to create task-list {checklist.get('name', 'Checklist')}")
+                    continue
+
+                tl_id = pl_task_list['id']
+                logger.info(f"Created task-list: {checklist.get('name', 'Checklist')}")
+
+                # Шаг 2: перенести элементы как tasks внутри списка
+                for idx, item in enumerate(items):
+                    name = item.get('text', '') or ''
+                    done = bool(item.get('checked', False))
+                    created = self.planka_client.create_task_in_list(
+                        task_list_id=tl_id,
+                        name=name,
+                        is_completed=done,
+                        position=idx * 65535  # разрядка позиций
+                    )
+                    if not created or 'id' not in created:
+                        logger.warning(f"Failed to create task item '{name}' in list {tl_id}")
         except Exception as e:
             logger.error(f"Error migrating checklists for card {kaiten_card_id}: {e}")
 
@@ -238,6 +248,83 @@ class KaitenToPlankaMigrator:
                     logger.warning(f"Attachment {attachment_name} has no URL")
         except Exception as e:
             logger.error(f"Error migrating attachments for card {kaiten_card_id}: {e}")
+
+    def migrate_comments(self, kaiten_card_id: int, planka_card_id: str):
+        """Migrate comments from a Kaiten card to a Planka card."""
+        try:
+            kaiten_comments = self.kaiten_client.get_card_comments(kaiten_card_id)
+            
+            for comment in kaiten_comments:
+                try:
+                    # Get comment text
+                    comment_text = comment.get('text', '')
+                    if not comment_text:
+                        continue
+                    
+                    # Get author information if available
+                    author_name = "Unknown User"
+                    author_id = comment.get('author_id')
+                    if author_id:
+                        # Try to get the author's name from Kaiten
+                        try:
+                            kaiten_user = self.kaiten_client.get_user_by_id(author_id)
+                            if kaiten_user:
+                                author_name = kaiten_user.get('full_name', 'Unknown User')
+                        except Exception as e:
+                            logger.warning(f"Could not get Kaiten user {author_id}: {e}")
+                    
+                    # Prepend author information to comment text since Planka
+                    # always attributes comments to the authenticated user
+                    full_comment_text = f"[{author_name}] {comment_text}"
+                    
+                    # Create comment in Planka
+                    planka_comment = self.planka_client.create_comment(
+                        card_id=planka_card_id,
+                        content=full_comment_text
+                    )
+                    
+                    if planka_comment and 'id' in planka_comment:
+                        logger.info(f"Created comment on card {planka_card_id}")
+                    else:
+                        logger.warning(f"Failed to create comment on card {planka_card_id} - this is a known issue with the current Planka API")
+                except Exception as e:
+                    logger.error(f"Error creating comment on card {planka_card_id}: {e}")
+            
+            logger.info(f"Migrated {len(kaiten_comments)} comments for card {kaiten_card_id}")
+        except Exception as e:
+            logger.error(f"Error migrating comments for card {kaiten_card_id}: {e}")
+
+    def migrate_external_links(self, kaiten_card_id: int, planka_card_id: str):
+        """Migrate external links from a Kaiten card to a Planka card."""
+        try:
+            kaiten_links = self.kaiten_client.get_card_external_links(kaiten_card_id)
+            
+            for link in kaiten_links:
+                try:
+                    # Get link URL and name
+                    link_url = link.get('url', '')
+                    link_name = link.get('name', link.get('title', ''))
+                    
+                    if not link_url:
+                        continue
+                    
+                    # Create external link in Planka
+                    planka_link = self.planka_client.create_external_link(
+                        card_id=planka_card_id,
+                        url=link_url,
+                        name=link_name
+                    )
+                    
+                    if planka_link and 'id' in planka_link:
+                        logger.info(f"Created external link '{link_name}' on card {planka_card_id}")
+                    else:
+                        logger.error(f"Failed to create external link on card {planka_card_id}")
+                except Exception as e:
+                    logger.error(f"Error creating external link on card {planka_card_id}: {e}")
+            
+            logger.info(f"Migrated {len(kaiten_links)} external links for card {kaiten_card_id}")
+        except Exception as e:
+            logger.error(f"Error migrating external links for card {kaiten_card_id}: {e}")
 
     def migrate_tags(self, planka_board_id: str):
         """Migrate tags from Kaiten to labels in Planka."""

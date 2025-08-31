@@ -121,6 +121,21 @@ class KaitenClient:
             logger.error(f"Error getting users: {e}")
             return []
 
+    def get_user_by_id(self, user_id: int) -> Dict[str, Any]:
+        """Get a specific user by ID from Kaiten."""
+        try:
+            import requests
+            user_url = f"{self.api_url}/api/v1/users/{user_id}"
+            response = requests.get(user_url, headers=self.client.headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Error getting user {user_id}: {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error getting user {user_id}: {e}")
+            return {}
+
     def get_tags(self) -> List[Dict[str, Any]]:
         """Get all tags from Kaiten."""
         try:
@@ -172,4 +187,29 @@ class KaitenClient:
                 return []
         except Exception as e:
             logger.error(f"Error getting attachments for card {card_id}: {e}")
+            return []
+
+    def get_card_comments(self, card_id: int) -> List[Dict[str, Any]]:
+        """Get all comments for a specific card."""
+        try:
+            import requests
+            comments_url = f"{self.api_url}/api/v1/cards/{card_id}/comments"
+            response = requests.get(comments_url, headers=self.client.headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Error getting comments for card {card_id}: {response.status_code} - {response.text}")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting comments for card {card_id}: {e}")
+            return []
+
+    def get_card_external_links(self, card_id: int) -> List[Dict[str, Any]]:
+        """Get all external links for a specific card."""
+        try:
+            # External links are included in the card details
+            card_details = self.get_card_details(card_id)
+            return card_details.get('external_links', [])
+        except Exception as e:
+            logger.error(f"Error getting external links for card {card_id}: {e}")
             return []

@@ -68,3 +68,7 @@ to execute script and pip you must activate venv first:
 ```bash
 source venv/bin/activate
 ```
+
+## Finish
+
+Хочу, чтобы ты прошелся по каждому изменению, которое сделал, и сверил его с моими промптами. Ты все сделал идеально? Допустил какие-нибудь ошибки?
