@@ -1036,3 +1036,81 @@ class PlankaClient:
         except Exception as e:
             logger.error(f"Error creating external link: {e}")
             return {}
+
+    @property
+    def me(self):
+        """
+        Get the current authenticated user using plankapy.
+        """
+        try:
+            # Use the plankapy client to get the current user
+            # The client attribute was initialized with plankapy
+            return self.client.me
+        except Exception as e:
+            logger.error(f"Error getting current user via plankapy: {e}")
+            return None
+
+    @property
+    def projects(self):
+        """
+        Get all projects using plankapy.
+        """
+        try:
+            # Use the plankapy client to get projects
+            projects = self.client.projects
+            
+            # Add the add_project_manager method to each project if it doesn't exist
+            for project in projects:
+                if not hasattr(project, 'add_project_manager'):
+                    # Bind the method to the project instance
+                    import types
+                    project.add_project_manager = types.MethodType(self._add_project_manager, project)
+            
+            return projects
+        except Exception as e:
+            logger.error(f"Error getting projects via plankapy: {e}")
+            return []
+
+    def _add_project_manager(self, project_obj, user):
+        """
+        Add a project manager to a project using the API.
+        
+        Args:
+            project_obj: The project to add manager to
+            user: The user to add as manager
+        """
+        try:
+            # Исправлен endpoint - используем /project-managers вместо /users
+            url = f"{self.api_url}/projects/{project_obj.id}/project-managers"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "userId": user.id
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            if response.status_code in [200, 201]:
+                logger.info(f"Successfully added user {user.id} as manager to project {project_obj.id}")
+                # Refresh the project after adding a manager
+                project_obj.refresh()
+            else:
+                logger.error(f"Error adding project manager: HTTP {response.status_code} - {response.text}")
+                raise requests.exceptions.HTTPError(f"HTTP {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"Error adding project manager: {e}")
+            raise
+
+
+    @property
+    def users(self):
+        """
+        Get all users using plankapy.
+        """
+        try:
+            # Use the plankapy client to get users
+            return self.client.users
+        except Exception as e:
+            logger.error(f"Error getting users via plankapy: {e}")
+            return []

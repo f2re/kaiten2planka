@@ -93,6 +93,7 @@ Planned migrations:
 - `test_imports.py`: Module import verification
 - `run_tests.py`: Test runner for all tests
 - `example_checklist_migration.py`: Example script demonstrating checklist migration
+- `manage_projects.py`: Project management utilities for Planka (add managers, list projects/users)
 
 ## Checklist Migration
 

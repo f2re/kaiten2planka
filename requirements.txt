@@ -2,3 +2,4 @@ pyyaml>=6.0
 python-dotenv>=0.19.0
 requests>=2.28.0
 kaiten>=1.0.0
+plankapy>=1.0.0
