@@ -35,20 +35,20 @@ def main():
     )
     
     # Clean all existing projects in Planka before migration
-    logger.info("Cleaning all existing projects in Planka")
-    if not planka_client.delete_all_boards_and_projects():
-        logger.error("Failed to clean existing projects in Planka")
-        return
+    # logger.info("Cleaning all existing projects in Planka")
+    # if not planka_client.delete_all_boards_and_projects():
+    #     logger.error("Failed to clean existing projects in Planka")
+    #     return
     
     # Verify that all projects are deleted
-    try:
-        existing_projects = planka_client.get_projects()
-        logger.info(f"Found {len(existing_projects)} existing projects after cleanup")
-        if existing_projects:
-            logger.warning("Some projects still exist after cleanup. This may cause issues.")
-            # Continue anyway, but log the warning
-    except Exception as e:
-        logger.error(f"Error while verifying cleanup: {e}")
+    # try:
+    #     existing_projects = planka_client.get_projects()
+    #     logger.info(f"Found {len(existing_projects)} existing projects after cleanup")
+    #     if existing_projects:
+    #         logger.warning("Some projects still exist after cleanup. This may cause issues.")
+    #         # Continue anyway, but log the warning
+    # except Exception as e:
+    #     logger.error(f"Error while verifying cleanup: {e}")
     # Initialize migrator
     migrator = KaitenToPlankaMigrator(kaiten_client, planka_client)
 
@@ -69,28 +69,30 @@ def main():
 
         # Create a new project in Planka for this space
         try:
-            ic(space_name)
-            project = planka_client.create_project(
-                name=space_name,  # Only the Kaiten Project name, nothing else
-                description=" ",  # Space character instead of empty string to avoid API error
-                type="private"
-            )
             
-            # Check if project was created successfully
-            if not project or 'id' not in project:
-                logger.error(f"Failed to create project in Planka for space {space_name}. Response: {project}")
-                continue  # Skip to the next space
+            if "WiFi Adapters UI" in space_name:
+                ic(space_name)
+                project = planka_client.create_project(
+                    name=space_name,  # Only the Kaiten Project name, nothing else
+                    description=" ",  # Space character instead of empty string to avoid API error
+                    type="private"
+                )
                 
-            project_id = project['id']
-            logger.info(f"Created new project in Planka: {project.get('name', project_id)}")
+                # Check if project was created successfully
+                if not project or 'id' not in project:
+                    logger.error(f"Failed to create project in Planka for space {space_name}. Response: {project}")
+                    continue  # Skip to the next space
+                    
+                project_id = project['id']
+                logger.info(f"Created new project in Planka: {project.get('name', project_id)}")
 
-            # Get boards for this space
-            kaiten_boards = kaiten_client.get_boards_for_space(space['id'])
-            if kaiten_boards:
-                # Perform migration for this space's data
-                migrator.migrate_space_data(project_id, kaiten_boards)
-            else:
-                logger.info(f"No boards found in space: {space_name}")
+                # Get boards for this space
+                kaiten_boards = kaiten_client.get_boards_for_space(space['id'])
+                if kaiten_boards:
+                    # Perform migration for this space's data
+                    migrator.migrate_space_data(project_id, kaiten_boards)
+                else:
+                    logger.info(f"No boards found in space: {space_name}")
         
         except Exception as e:
             logger.error(f"An error occurred while processing space {space_name}: {e}")
